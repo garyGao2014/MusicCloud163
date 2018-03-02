@@ -3,34 +3,47 @@ package com.github.gary;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.github.gary.api.MusicApi;
+import com.github.gary.asyn.FileDownloadThread;
 import com.github.gary.core.Params;
 import com.github.gary.req.LoginReq;
 import com.github.gary.req.MusicUrlReq;
 import com.github.gary.req.PlayListDetailReq;
 import com.github.gary.req.PlayListReq;
 import com.github.gary.resp.PlayListDetailResp;
+import com.github.gary.resp.PlayListResp;
+import com.github.gary.resp.PlayerMusicResp;
+import com.github.gary.resp.PlayerResp;
+import com.github.gary.service.IPlayListDetailSerivce;
+import com.github.gary.service.IPlayerService;
+import com.github.gary.service.imp.PlayListDetailServiceImpl;
+import com.github.gary.service.imp.PlayerSeriviceImpl;
 import com.github.gary.tools.EncryTool;
+import com.github.gary.tools.FileTool;
 import com.github.gary.tools.HttpTool;
+import com.google.common.collect.Maps;
 
 import java.io.UnsupportedEncodingException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author garygao
  */
 public class Main {
+
+
     public static void main(String[] args) {
 //        login();
-        getMusicUrl();
+//        getMusicUrl();
 //        getPlayList();
-//        getPlayListDetail();
+        getPlayListDetail();
     }
 
 
     private static void login() {
-        //288986872
-        String username = "346703329@qq.com";
-        String password = "2012081048chengZ";
+        //xxxx
+        String username = "xxxxx@qq.com";
+        String password = "xxxx";
         LoginReq login = new LoginReq();
         login.setUsername(username);
         try {
@@ -49,7 +62,7 @@ public class Main {
         MusicUrlReq musicUrl = new MusicUrlReq();
         musicUrl.setBr(Params.BR.br198.getBr());
         musicUrl.setCsrf_token("");
-        musicUrl.setIds(new String[]{"418603077"});
+        musicUrl.setIds(new String[]{"xxxxxx"});
 //        String result = HttpTool.post(MusicApi.musicUrl, "{'ids':'[" + 418603077 + "]','br':" + Params.BR.br198.getBr() + ",'csrf_token':''}");
         String result = HttpTool.post(MusicApi.musicUrl, JSONObject.toJSONString(musicUrl));
         System.out.println(result);
@@ -59,7 +72,7 @@ public class Main {
         PlayListReq palyList = new PlayListReq();
         palyList.setCsrf_token("");
         palyList.setLimit(1);
-        palyList.setUid("288986872");
+        palyList.setUid("xxxxxx");
         palyList.setOffset(0);
         String result = HttpTool.post(MusicApi.playListUrl, JSONObject.toJSONString(palyList));
         System.out.println(result);
@@ -73,36 +86,48 @@ public class Main {
     }
 
     private static void getPlayListDetail() {
-        PlayListDetailReq playListDetail = new PlayListDetailReq();
-        playListDetail.setId("398932332");
-        playListDetail.setCsrf_token("");
-        playListDetail.setLimit(10);
-        playListDetail.setN(100);
-        playListDetail.setTotal(true);
-        playListDetail.setOffset(0);
-        String result = HttpTool.post(MusicApi.playListDetailUrl, JSONObject.toJSONString(playListDetail));
-        System.out.println(result);
 
-        PlayListDetailResp playListDetailResp = JSONObject.parseObject(result, PlayListDetailResp.class);
-        PlayListDetailResp.PlaylistBean playlist1 = playListDetailResp.getPlaylist();
-        List<PlayListDetailResp.PlaylistBean.TracksBean> tracks1 = playlist1.getTracks();
-        PlayListDetailResp.PlaylistBean.TracksBean tracksBean = tracks1.get(0);
-        tracksBean.getId();
-        System.out.println("####"+tracksBean.getId());
-        JSONObject playlist = JSONObject.parseObject(JSONObject.parseObject(result).get("playlist").toString());
-        System.out.println("playlist:" + playlist);
-        JSONArray tracks = playlist.getJSONArray("tracks");
-        for (int j = 0; j < tracks.size(); j++) {
-            JSONObject track = tracks.getJSONObject(j);
-            String id = track.getString("id");
-            String name = track.getString("name");
-            System.out.println("id:" + id + ",name:" + name);
-            MusicUrlReq musicUrl = new MusicUrlReq();
-            musicUrl.setBr(Params.BR.br198.getBr());
-            musicUrl.setCsrf_token("");
-            musicUrl.setIds(new String[]{id});
-            result = HttpTool.post(MusicApi.musicUrl, JSONObject.toJSONString(musicUrl));
-            System.out.println(result);
+        Map<String, PlayListDetailResp.PlaylistBean.TracksBean> musices = Maps.newHashMap();
+        String id = "2123548611";
+        IPlayListDetailSerivce playListDetailSerivce = new PlayListDetailServiceImpl();
+        PlayListDetailResp playListDetailById = playListDetailSerivce.getPlayListDetailById(id);
+        if (playListDetailById != null) {
+            PlayListDetailResp.PlaylistBean playlist = playListDetailById.getPlaylist();
+            List<PlayListDetailResp.PlaylistBean.TracksBean> tracks = playlist.getTracks();
+            for (int i = 0; i < tracks.size(); i++) {
+                PlayListDetailResp.PlaylistBean.TracksBean tracksBean = tracks.get(i);
+                tracksBean.getId();
+                musices.put(tracksBean.getId() + "", tracksBean);
+            }
+        }
+        IPlayerService playerService = new PlayerSeriviceImpl();
+        List<PlayerMusicResp> musicResps = playerService.getPlayerUrlByIds(musices.keySet());
+        if (musicResps != null && musicResps.size() > 0) {
+            for (PlayerMusicResp resp : musicResps) {
+                String mId = resp.getId();
+                String artName = "";
+                PlayListDetailResp.PlaylistBean.TracksBean tracksBean = musices.get(mId);
+                if (tracksBean != null) {
+                    List<PlayListDetailResp.PlaylistBean.TracksBean.ArBean> ar = tracksBean.getAr();
+                    if (ar != null) {
+                        PlayListDetailResp.PlaylistBean.TracksBean.ArBean arBean = ar.get(0);
+                        if (arBean != null) {
+                            artName = arBean.getName();
+                        }
+                    }
+                }
+                String name = artName + " - " + musices.get(mId).getName() + "." + resp.getType();
+                String url = resp.getUrl();
+                int br = resp.getBr();
+                System.out.println("id:" + mId + ",||name:" + name + ",||url:" + ",||" + url + ",||br:" + br);
+                Map<String, String> asynMaps = Maps.newHashMap();
+                asynMaps.put(url, name);
+                try {
+                    FileDownloadThread.queue.put(asynMaps);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 }
